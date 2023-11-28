@@ -3,23 +3,23 @@
 
 #include "stm32f1xx.h"
 
-#define STR_SIZE 5
+#define STR_LENGTH 5
+#define CODE_LENGTH 200
 
 bool learning_mode = false;
 int sgn_duration, t_ini;
 int antibounce_delay;
-int sgn_idx, team_idx, codes[10][200], buffer[200];
+int sgn_idx, team_idx, codes[10][CODE_LENGTH], buffer[CODE_LENGTH];
 
 char tx_str[10];
 
 // Prototipos das funcoes
 void ConfigTIM2();
-void 
-ConfigSystick();
+void ConfigSystick();
 void TIM2_IRQHandler();
 void EXTI1_IRQHandler();
 void SysTick_Handler();
-bool isCodeEmpty(int code[200]);
+bool isCodeEmpty(int code[CODE_LENGTH]);
 void compareCodes();
 
 // Funcoes de debug
@@ -55,7 +55,6 @@ int main() {
     ConfigTIM2(); 
 
     while (1);
- 
     return 0;
 }
 
@@ -78,8 +77,8 @@ void int2str(int valor) {
             valor *= -1;
             j++;
         }
-        tx_str[STR_SIZE] = '\0'; // Marcar o fim da string
-        for (int i = STR_SIZE - 1; i >= j; --i) {
+        tx_str[STR_LENGTH] = '\0'; // Marcar o fim da string
+        for (int i = STR_LENGTH - 1; i >= j; --i) {
             tx_str[i] = (valor % 10) + '0'; // Converte o digito para char
             valor /= 10;
         }
@@ -116,9 +115,9 @@ void ConfigSystick() {
     SysTick->CTRL = 0b111;  // Clock do processador sem dividir, H? ab. IRQ e SysTick
 }
 
-// Verifica se o código está vazio.
-bool isCodeEmpty(int code[200]) {
-    for (int i = 0; i < 200; ++i) {
+// Verifica se o cÃ³digo estÃ¡ vazio.
+bool isCodeEmpty(int code[CODE_LENGTH]) {
+    for (int i = 0; i < CODE_LENGTH; ++i) {
         if (code[i] != 0) {
             return false;
         }
@@ -126,22 +125,35 @@ bool isCodeEmpty(int code[200]) {
     return true;
 }
 
-// Compara o código do buffer com os códigos registrados.
+// Compara o cÃ³digo do buffer com os cÃ³digos registrados.
 void compareCodes() {
+    EnviaStr_USART("Codigo: ");
+    for (int i = 0; buffer[i] != 0; i++) {
+        EnviaNum_USART(buffer[i]);
+        EnviaStr_USART(" ");
+    }
+    EnviaStr_USART("\n");
     bool match = true;
     for (int i = 0; i < team_idx; ++i) {
         if (!isCodeEmpty(codes[i])) {
-            for (int j = 0; (j < 200 && codes[i][j] != 0); ++j) {
-                // Verifica se o valor do buffer está dentro da tolerância de 15%
-                if ((buffer[j] < codes[i][j] * 0.85 || buffer[j] > codes[i][j] * 1.15) ) {
-                    match = false;                   
+            for (int j = 0; (j < CODE_LENGTH && codes[i][j] != 0); ++j) {
+                // Verifica se o valor do buffer estÃ¡ dentro da tolerÃ¢ncia de 20%
+                if ((buffer[j] < codes[i][j] * 0.80 || buffer[j] > codes[i][j] * 1.20) ) {
+                    match = false;
+                    EnviaStr_USART("Diferenca de ");
+                    EnviaNum_USART((codes[i][j] - buffer[j]) * 100 / codes[i][j]);
+                    EnviaStr_USART("% no codigo, esperado ");
+                    EnviaNum_USART(codes[i][j]);                 
+                    EnviaStr_USART(" e detectado ");
+                    EnviaNum_USART(buffer[j]);
+                    EnviaStr_USART("\n\n");
                     break;
                 }
             }
             if (match) {
                 EnviaStr_USART("Time reconhecido:");
                 EnviaNum_USART(i);
-                EnviaStr_USART("\n");
+                EnviaStr_USART("\n\n");
                 return;
             }
         }
@@ -154,10 +166,9 @@ void process_signal() {
     if (learning_mode) {    
         if (sgn_duration > 10000) { // Se o pulso for maior que 10ms, descarta o sinal e finaliza o aprendizado
             EXTI1_IRQHandler();
-            t_ini = 0; 
             return;
         }
-        if (sgn_idx < 200) {    
+        if (sgn_idx < CODE_LENGTH) {    
             codes[team_idx][sgn_idx++] = sgn_duration;
         }
     } 
@@ -165,12 +176,12 @@ void process_signal() {
     // Modo de operacao
     else if (sgn_duration > 10000) {
         compareCodes();     
-        for (int k = 0; k < 200; k++) {
+        for (int k = 0; k < CODE_LENGTH; k++) {
             buffer[k] = 0;
         }  
         sgn_idx = 0;
     } else {        
-        if (sgn_idx < 200) {
+        if (sgn_idx < CODE_LENGTH) {
             buffer[sgn_idx++] = sgn_duration;
         } else {
             sgn_idx = 0;
@@ -205,10 +216,8 @@ void EXTI1_IRQHandler() {
 
     learning_mode = !learning_mode;
     GPIOA->ODR ^= (1<<2);           // Inverte o estado do LED - Modo aprendizagem: aceso
-
-    if (sgn_idx > 0) {        
-        sgn_idx = 0;
-    }
+       
+    sgn_idx = 0;
 
     if (!learning_mode) {        
         EnviaStr_USART("Time cadastrado:");
@@ -226,9 +235,7 @@ void EXTI1_IRQHandler() {
 
 // Gerencia a interrupcao do SysTick. Chamada a cada 10ms.
 void SysTick_Handler() {
-    if (antibounce_delay>0) {
-        antibounce_delay--;
-    } else {
+    if (antibounce_delay-- <= 0) {
         EXTI->IMR |= EXTI_IMR_IM1; // Hab. mascara de interrup. do EXT200I1
     }
 }
