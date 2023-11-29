@@ -19,7 +19,6 @@ void ConfigSystick();
 void TIM2_IRQHandler();
 void EXTI1_IRQHandler();
 void SysTick_Handler();
-bool isCodeEmpty(int code[CODE_LENGTH]);
 void compareCodes();
 
 // Funcoes de debug
@@ -90,6 +89,15 @@ void EnviaNum_USART(int valor) {
     EnviaStr_USART(tx_str);
 }
 
+void EnviaCod_USART(int code[CODE_LENGTH]) {
+    EnviaStr_USART("Codigo: ");
+    for (int i = 0; code[i] != 0; i++) {
+        EnviaNum_USART(code[i]);
+        EnviaStr_USART(" ");
+    }
+    EnviaStr_USART("\n");
+}
+
 void ConfigTIM2() {
     /* Config. TIM2 com entrada de captura no canal 1 (PA0) */
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;             // Habilita clock do T? IM2 do bus APB1
@@ -102,7 +110,7 @@ void ConfigTIM2() {
     TIM2->CCER |= TIM_CCER_CC1P;                    // Sensivel na borda de descida da entrada
     TIM2->CCER |= TIM_CCER_CC1E;                    // Habilita a captura no CH1
     TIM2->SR &= ~TIM_SR_CC1IF;                      // Apaga flag sinalizadora da IRQ
-    TIM2->DIER |= TIM_DIER_CC1IE;                   // Habilita IRQ por captura    
+    TIM2->DIER |= TIM_DIER_UIE | TIM_DIER_CC1IE;                   // Habilita IRQ por captura    
     NVIC->ISER[0] = (uint32_t)(1 << TIM2_IRQn);     // Hab. IRQ do TIM2 na NVIC
 
     // Config. o modo one-pulse
@@ -115,7 +123,7 @@ void ConfigSystick() {
     SysTick->CTRL = 0b111;  // Clock do processador sem dividir, H? ab. IRQ e SysTick
 }
 
-// Verifica se o código está vazio.
+// Verifica se o cÃ³digo estÃ¡ vazio.
 bool isCodeEmpty(int code[CODE_LENGTH]) {
     for (int i = 0; i < CODE_LENGTH; ++i) {
         if (code[i] != 0) {
@@ -125,20 +133,18 @@ bool isCodeEmpty(int code[CODE_LENGTH]) {
     return true;
 }
 
-// Compara o código do buffer com os códigos registrados.
+// Compara o codigo do buffer com os coigos registrados.
 void compareCodes() {
-    EnviaStr_USART("Codigo: ");
-    for (int i = 0; buffer[i] != 0; i++) {
-        EnviaNum_USART(buffer[i]);
-        EnviaStr_USART(" ");
-    }
-    EnviaStr_USART("\n");
-    bool match = true;
+    if (isCodeEmpty(buffer))  return;
+
+    EnviaCod_USART(buffer);
     for (int i = 0; i < team_idx; ++i) {
+        bool match = true;
+
         if (!isCodeEmpty(codes[i])) {
             for (int j = 0; (j < CODE_LENGTH && codes[i][j] != 0); ++j) {
-                // Verifica se o valor do buffer está dentro da tolerância de 20%
-                if ((buffer[j] < codes[i][j] * 0.80 || buffer[j] > codes[i][j] * 1.20) ) {
+                // Verifica se o valor do buffer esta dentro da tolerancia de 25%
+                if ((buffer[j] < codes[i][j] * 0.75 || buffer[j] > codes[i][j] * 1.25) ) {
                     match = false;
                     EnviaStr_USART("Diferenca de ");
                     EnviaNum_USART((codes[i][j] - buffer[j]) * 100 / codes[i][j]);
@@ -162,9 +168,9 @@ void compareCodes() {
 
 // Processa o sinal recebido.
 void process_signal() {
-    // Modo de aprendizado
+    // MODO DE APRENDIZADO
     if (learning_mode) {    
-        if (sgn_duration > 10000) { // Se o pulso for maior que 10ms, descarta o sinal e finaliza o aprendizado
+        if (sgn_duration > 10000) {         // Se o pulso for maior que 10ms, descarta o sinal e finaliza o aprendizado
             EXTI1_IRQHandler();
             return;
         }
@@ -173,33 +179,47 @@ void process_signal() {
         }
     } 
 
-    // Modo de operacao
-    else if (sgn_duration > 10000) {
-        compareCodes();     
-        for (int k = 0; k < CODE_LENGTH; k++) {
-            buffer[k] = 0;
-        }  
-        sgn_idx = 0;
-    } else {        
-        if (sgn_idx < CODE_LENGTH) {
-            buffer[sgn_idx++] = sgn_duration;
-        } else {
+    // MODO DE OPERACAO
+    else  {
+        if (sgn_duration > 10000) {
+            compareCodes();     
+            for (int k = 0; k < CODE_LENGTH; k++) {
+                buffer[k] = 0;
+            }  
+            sgn_idx = 0;
+            return;
+        }
+    
+        if (sgn_idx > CODE_LENGTH) {        // Se o buffer estiver cheio, descarta o sinal 
             sgn_idx = 0;
         }
+        buffer[sgn_idx++] = sgn_duration;
     }
 }
 
 // Gerencia a interrupcao do TIM2. Chamada nas bordas de descida e subida do sinal.
 void TIM2_IRQHandler() {
+    if (TIM2->SR & TIM_SR_UIF) {        // Verifica se a IRQ foi disparada pelo overflow
+        TIM2->SR &= ~TIM_SR_UIF;        // Apaga flag sinalizadora da IRQ
+        sgn_duration = 0;
+        t_ini = 0;
+       
+        return;
+    }    
+
+    // Se o contador estiver zerado e for borda de descida
+    if (TIM2->CCR1 == 0 && (TIM2->CCER & TIM_CCER_CC1P)) { 
+        sgn_duration = 0;
+        t_ini = 0;
+        TIM2->CR1 |= TIM_CR1_CEN;       // Habilita o contador
+    } else {
+        // Se não, calcula a duracao do pulso
+        sgn_duration = TIM2->CCR1 - t_ini;
+        t_ini = TIM2->CCR1;
+    }
+
     TIM2->SR &= ~TIM_SR_CC1IF;          // Apaga flag sinalizadora da IRQ
     TIM2->CCER ^= TIM_CCER_CC1P;        // Inverte o sinal de captura Ex.: Se era borda de descida, passa a ser de subida
-   
-    sgn_duration = TIM2->CCR1 - t_ini;
-    t_ini = TIM2->CCR1;
-
-    if (TIM2->CCR1 == 0) {              // Hab. contagem se o contador estiver zerado
-        TIM2->CR1 |= TIM_CR1_CEN;
-    }
 
     if (sgn_duration > 150) {           // Somente considera pulsos com duracao maior que 300us
         process_signal();
@@ -214,28 +234,25 @@ void EXTI1_IRQHandler() {
 
     antibounce_delay = 25;          // 250ms
 
-    learning_mode = !learning_mode;
-    GPIOA->ODR ^= (1<<2);           // Inverte o estado do LED - Modo aprendizagem: aceso
-       
-    sgn_idx = 0;
-
-    if (!learning_mode) {        
+    if (learning_mode && !isCodeEmpty(codes[team_idx])) {        
         EnviaStr_USART("Time cadastrado:");
         EnviaNum_USART(team_idx);
         EnviaStr_USART("\n");
-        EnviaStr_USART("Codigo: ");
-        for (int i = 0; codes[team_idx][i] != 0; i++) {
-            EnviaNum_USART(codes[team_idx][i]);
-            EnviaStr_USART(" ");
-        }
-        EnviaStr_USART("\n\n");
+        EnviaCod_USART(codes[team_idx]);
+        EnviaStr_USART("\n");
         team_idx++;
     }
+    sgn_idx = 0;
+
+    learning_mode = !learning_mode;
+    GPIOA->ODR ^= (1<<2);           // Inverte o estado do LED - Modo aprendizagem: aceso
 }
 
 // Gerencia a interrupcao do SysTick. Chamada a cada 10ms.
 void SysTick_Handler() {
-    if (antibounce_delay-- <= 0) {
+    if (antibounce_delay > 0) {
+        antibounce_delay--;
+    } else {
         EXTI->IMR |= EXTI_IMR_IM1; // Hab. mascara de interrup. do EXT200I1
     }
 }
