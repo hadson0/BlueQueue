@@ -26,6 +26,7 @@ void EnviaStr_USART(char *string);
 void EnviaNum_USART(int valor);
 void int2str(int valor);
 void EXTI1_IRQHandler (void);
+void EXTI2_IRQHandler(void);
 
 int main() {
     // Habilita clock do barramento APB2
@@ -33,9 +34,9 @@ int main() {
     
     GPIOC->CRH |= GPIO_CRH_MODE13_1;                        // Configura pino PC13 como saida open-drain 2 MHz
 
-    // Configura pino PA1 como entrada e PA2 como saida                     
-    GPIOA->CRL = (GPIOA->CRL & 0xFFFFF00F) | (0x8U << (4 * 1)) | (0x3U << (4 * 2));
-    GPIOA->ODR |=  GPIO_ODR_ODR1;                           // Habilitar pull-up no pino PA1
+    // Configura pino PA1|PA2 como entrada e PA3 como saida                     
+    GPIOA->CRL = (GPIOA->CRL & 0xFFFF000F) | (0x8U << (4 * 1)) |(0x8U << (4 * 2)) | (0x3U << (4 * 3));
+    GPIOA->ODR |=  GPIO_ODR_ODR1 | GPIO_ODR_ODR2;                           // Habilitar pull-up no pino PA1
 
     // Configura o USART1 para Tx e Rx sem IRQ
     GPIOA->CRH = (GPIOA->CRH & 0xFFFFFF0F) | 0x000000B0;    // PA9 como saida push-pull em funcao alt. (Tx da USART1) 0b1011=0xB
@@ -44,11 +45,11 @@ int main() {
     USART1->CR1 |= (USART_CR1_RE | USART_CR1_TE);           // Hab. RX e TX
     USART1->CR1 |= USART_CR1_UE;                            // Hab USART1
 
-    // Configura o PA1 com interrupcao no EXTI1
-    AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI1_PA;                // Seleciona PA1 para EXTI1
-    EXTI->FTSR = EXTI_FTSR_FT1;                             // Sensivel na rampa de descida
-    EXTI->IMR = EXTI_IMR_IM1;                               // Hab. mascara de interrup. do EXTI1
-    NVIC->ISER[0] = (uint32_t)(1 << EXTI1_IRQn);            // Hab. IRQ do EXTI1 na NVIC
+    // Configura o PA1|PA2 com interrupcao no EXTI1|EXTI2
+    AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI1_PA | AFIO_EXTICR1_EXTI2_PA;                 // Seleciona PA1 para EXTI1
+    EXTI->FTSR = EXTI_FTSR_FT1 | EXTI_FTSR_FT2;                                     // Sensivel na rampa de descida
+    EXTI->IMR = EXTI_IMR_IM1 | EXTI_IMR_IM2;                                        // Hab. mascara de interrup. do EXTI1
+    NVIC->ISER[0] = (uint32_t)(1 << EXTI1_IRQn) | (uint32_t)(1 << EXTI2_IRQn);      // Hab. IRQ do EXTI1 na NVIC
 
     ConfigSystick();
     ConfigTIM2(); 
@@ -76,7 +77,7 @@ void int2str(int valor) {
             valor *= -1;
             j++;
         }
-        tx_str[STR_LENGTH] = '\0'; // Marcar o fim da string
+        tx_str[STR_LENGTH] = '\0'; // Marca o fim da string
         for (int i = STR_LENGTH - 1; i >= j; --i) {
             tx_str[i] = (valor % 10) + '0'; // Converte o digito para char
             valor /= 10;
@@ -100,7 +101,7 @@ void EnviaCod_USART(int code[CODE_LENGTH]) {
 
 void ConfigTIM2() {
     /* Config. TIM2 com entrada de captura no canal 1 (PA0) */
-    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;             // Habilita clock do T? IM2 do bus APB1
+    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;             // Habilita clock do TIM2 do bus APB1
     TIM2->ARR = 0xFFFF;                             // Registrador de auto-carregamento (1kHz -> periodo max. 1ms)
     TIM2->PSC = 15;                                 // Prescaler
     TIM2->CNT = 0;                                  // Zera o contador
@@ -243,16 +244,31 @@ void EXTI1_IRQHandler() {
         team_idx++;
     }
     sgn_idx = 0;
-
     learning_mode = !learning_mode;
-    GPIOA->ODR ^= (1<<2);           // Inverte o estado do LED - Modo aprendizagem: aceso
+    GPIOA->ODR ^= (1<<3);           // Inverte o estado do LED - Modo aprendizagem: aceso
 }
+
+// Gerencia a interrupcao do EXTI2. Chamada quando o botao de remoção de time e pressionado
+void EXTI2_IRQHandler() {
+    EXTI->PR = EXTI_PR_PIF2;        // Apaga flag sinalizadora da IRQ
+    EXTI->IMR &= ~EXTI_IMR_IM2;     // Desabilita mascara de interrup. do EXTI2
+
+    antibounce_delay = 25;          // 250ms
+    
+    if(team_idx > 0)
+        team_idx--;
+
+    for(int i = 0;i < CODE_LENGTH;i++) {
+        codes[team_idx][i] = 0;
+    }
+}
+
 
 // Gerencia a interrupcao do SysTick. Chamada a cada 10ms.
 void SysTick_Handler() {
     if (antibounce_delay > 0) {
         antibounce_delay--;
     } else {
-        EXTI->IMR |= EXTI_IMR_IM1; // Hab. mascara de interrup. do EXT200I1
+        EXTI->IMR |= EXTI_IMR_IM1 | EXTI_IMR_IM2; // Hab. mascara de interrup. do EXTI1 e EXTI2        
     }
 }
