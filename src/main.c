@@ -5,11 +5,13 @@
 
 #define STR_LENGTH 5
 #define CODE_LENGTH 200
+#define SIZE_QUEUE 10
 
 bool learning_mode = false;
 int sgn_duration, t_ini;
 int antibounce_delay;
-int sgn_idx, team_idx, codes[10][CODE_LENGTH], buffer[CODE_LENGTH];
+int sgn_idx, team_idx, codes[10][CODE_LENGTH], buffer[CODE_LENGTH], fila[10];
+int topo = -1, fundo = -1;
 
 char tx_str[10];
 
@@ -27,6 +29,14 @@ void EnviaNum_USART(int valor);
 void int2str(int valor);
 void EXTI1_IRQHandler (void);
 void EXTI2_IRQHandler(void);
+
+// Funcoes de fila
+int checkQueue(int team);
+int deQueue();
+void enQueue(int team);
+int isFull();
+int isEmpty();
+
 
 int main() {
     // Habilita clock do barramento APB2
@@ -158,9 +168,13 @@ void compareCodes() {
                 }
             }
             if (match) {
-                EnviaStr_USART("Time reconhecido:");
+                EnviaStr_USART("team reconhecido:");
                 EnviaNum_USART(i);
                 EnviaStr_USART("\n\n");
+
+                if(checkQueue(i)){                      //Checa se ja ta na fila
+                    enQueue(i);
+                }
                 return;
             }
         }
@@ -236,7 +250,7 @@ void EXTI1_IRQHandler() {
     antibounce_delay = 25;          // 250ms
 
     if (learning_mode && !isCodeEmpty(codes[team_idx])) {        
-        EnviaStr_USART("Time cadastrado:");
+        EnviaStr_USART("team cadastrado:");
         EnviaNum_USART(team_idx);
         EnviaStr_USART("\n");
         EnviaCod_USART(codes[team_idx]);
@@ -248,7 +262,7 @@ void EXTI1_IRQHandler() {
     GPIOA->ODR ^= (1<<3);           // Inverte o estado do LED - Modo aprendizagem: aceso
 }
 
-// Gerencia a interrupcao do EXTI2. Chamada quando o botao de remoção de time e pressionado
+// Gerencia a interrupcao do EXTI2. Chamada quando o botao de remoção de team e pressionado
 void EXTI2_IRQHandler() {
     EXTI->PR = EXTI_PR_PIF2;        // Apaga flag sinalizadora da IRQ
     EXTI->IMR &= ~EXTI_IMR_IM2;     // Desabilita mascara de interrup. do EXTI2
@@ -272,3 +286,61 @@ void SysTick_Handler() {
         EXTI->IMR |= EXTI_IMR_IM1 | EXTI_IMR_IM2; // Hab. mascara de interrup. do EXTI1 e EXTI2        
     }
 }
+
+//Funcoes da fila
+
+int isFull() {
+  if ((topo == fundo + 1) || (topo == 0 && fundo == SIZE_QUEUE - 1)) return 1;
+  return 0;
+}
+
+int isEmpty() {
+  if (topo == -1) return 1;
+  return 0;
+}
+
+void enQueue(int team) {
+  if (isFull())
+    EnviaStr_USART("Fila cheia \n");
+  else {
+    if (topo == -1) topo = 0;
+    fundo = (fundo + 1) % SIZE_QUEUE;
+    fila[fundo] = team;
+    EnviaStr_USART("Inserido ");
+  }
+}
+
+int deQueue() {
+  int team;
+  if (isEmpty()) {
+    EnviaStr_USART("Fila vazia \n");
+    return (-1);
+  } else {
+    team = fila[topo];
+    if (topo == fundo) {
+      topo = -1;
+      fundo = -1;
+    } 
+    // Q has only one team, so we reset the 
+    // queue after dequeing it. ?
+    else {
+      topo = (topo + 1) % SIZE_QUEUE;
+    }
+    EnviaStr_USART("team deletado ");
+    return (team);
+  }
+}
+
+int checkQueue(int team){
+    if(isEmpty()){
+        return 0;
+    }
+    for (int i = topo; i != fundo; i = (i + 1) % SIZE_QUEUE) {
+        if(fila[i] == i){
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
