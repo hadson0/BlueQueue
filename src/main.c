@@ -10,7 +10,7 @@
 bool learning_mode = false;
 int sgn_duration, t_ini;
 int antibounce_delay;
-int sgn_idx, team_idx, codes[10][CODE_LENGTH], buffer[CODE_LENGTH], fila[10];
+int sgn_idx, team_idx, codes[10][CODE_LENGTH], buffer[CODE_LENGTH], fila[10] = {20};
 int topo = -1, fundo = -1;
 
 char tx_str[10];
@@ -321,8 +321,6 @@ int deQueue() {
       topo = -1;
       fundo = -1;
     } 
-    // Q has only one team, so we reset the 
-    // queue after dequeing it. ?
     else {
       topo = (topo + 1) % SIZE_QUEUE;
     }
@@ -333,7 +331,7 @@ int deQueue() {
 
 int checkQueue(int team){
     if(isEmpty()){
-        return 0;
+        return 1;
     }
     for (int i = topo; i != fundo; i = (i + 1) % SIZE_QUEUE) {
         if(fila[i] == i){
