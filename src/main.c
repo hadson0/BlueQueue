@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stdio.h>
+#include "queue.h"
 
 #include "stm32f1xx.h"
 
@@ -28,6 +29,8 @@ void EnviaNum_USART(int valor);
 void int2str(int valor);
 void EXTI1_IRQHandler (void);
 void EXTI2_IRQHandler(void);
+
+
 
 int main() {
     // Habilita clock do barramento APB2
@@ -245,7 +248,7 @@ void EXTI1_IRQHandler() {
     antibounce_delay = 25;          // 250ms
 
     if (learning_mode && !isCodeEmpty(codes[team_idx])) {        
-        EnviaStr_USART("team cadastrado:");
+        EnviaStr_USART("time cadastrado:");
         EnviaNum_USART(team_idx);
         EnviaStr_USART("\n");
         EnviaCod_USART(codes[team_idx]);
