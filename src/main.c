@@ -9,7 +9,7 @@
 bool learning_mode = false;
 int sgn_duration, t_ini;
 int antibounce_delay;
-int sgn_idx, team_idx, codes[10][CODE_LENGTH], buffer[CODE_LENGTH];
+int sgn_idx, team_idx, codes[11][CODE_LENGTH], buffer[CODE_LENGTH];
 
 char tx_str[10];
 
@@ -20,6 +20,7 @@ void TIM2_IRQHandler();
 void EXTI1_IRQHandler();
 void SysTick_Handler();
 void compareCodes();
+void decadastra();
 
 // Funcoes de debug
 void EnviaStr_USART(char *string);
@@ -158,9 +159,17 @@ void compareCodes() {
                 }
             }
             if (match) {
-                EnviaStr_USART("Time reconhecido:");
+                EnviaStr_USART("team reconhecido:");
                 EnviaNum_USART(i);
                 EnviaStr_USART("\n\n");
+                
+                if(i == 0) {                                 //Time 0 seria o controle de remocao da fila
+                    deQueue();
+                }
+                else if(checkQueue(i) && !isFull()){         //Checa se nao ta na fila e se nao ta cheia
+                    enQueue(i);
+                }
+                display();
                 return;
             }
         }
@@ -236,7 +245,7 @@ void EXTI1_IRQHandler() {
     antibounce_delay = 25;          // 250ms
 
     if (learning_mode && !isCodeEmpty(codes[team_idx])) {        
-        EnviaStr_USART("Time cadastrado:");
+        EnviaStr_USART("team cadastrado:");
         EnviaNum_USART(team_idx);
         EnviaStr_USART("\n");
         EnviaCod_USART(codes[team_idx]);
@@ -248,13 +257,18 @@ void EXTI1_IRQHandler() {
     GPIOA->ODR ^= (1<<3);           // Inverte o estado do LED - Modo aprendizagem: aceso
 }
 
-// Gerencia a interrupcao do EXTI2. Chamada quando o botao de remoção de time e pressionado
+// Gerencia a interrupcao do EXTI2. Chamada quando o botao de remoção de team e pressionado
 void EXTI2_IRQHandler() {
     EXTI->PR = EXTI_PR_PIF2;        // Apaga flag sinalizadora da IRQ
     EXTI->IMR &= ~EXTI_IMR_IM2;     // Desabilita mascara de interrup. do EXTI2
 
     antibounce_delay = 25;          // 250ms
     
+    decadastra();
+}
+
+// Funcao de decadastramento
+void decadastra() {
     if(team_idx > 0)
         team_idx--;
 
