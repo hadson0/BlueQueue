@@ -30,8 +30,6 @@ void int2str(int valor);
 void EXTI1_IRQHandler (void);
 void EXTI2_IRQHandler(void);
 
-
-
 int main() {
     // Habilita clock do barramento APB2
     RCC->APB2ENR |= RCC_APB2ENR_IOPAEN  | RCC_APB2ENR_IOPCEN | RCC_APB2ENR_AFIOEN; 
@@ -94,15 +92,6 @@ void EnviaNum_USART(int valor) {
     EnviaStr_USART(tx_str);
 }
 
-void EnviaCod_USART(int code[CODE_LENGTH]) {
-    EnviaStr_USART("Codigo: ");
-    for (int i = 0; code[i] != 0; i++) {
-        EnviaNum_USART(code[i]);
-        EnviaStr_USART(" ");
-    }
-    EnviaStr_USART("\n");
-}
-
 void ConfigTIM2() {
     /* Config. TIM2 com entrada de captura no canal 1 (PA0) */
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;             // Habilita clock do TIM2 do bus APB1
@@ -151,21 +140,10 @@ void compareCodes() {
                 // Verifica se o valor do buffer esta dentro da tolerancia de 25%
                 if ((buffer[j] < codes[i][j] * 0.75 || buffer[j] > codes[i][j] * 1.25) ) {
                     match = false;
-                    EnviaStr_USART("Diferenca de ");
-                    EnviaNum_USART((codes[i][j] - buffer[j]) * 100 / codes[i][j]);
-                    EnviaStr_USART("% no codigo, esperado ");
-                    EnviaNum_USART(codes[i][j]);                 
-                    EnviaStr_USART(" e detectado ");
-                    EnviaNum_USART(buffer[j]);
-                    EnviaStr_USART("\n\n");
                     break;
                 }
             }
             if (match) {
-                EnviaStr_USART("team reconhecido:");
-                EnviaNum_USART(i);
-                EnviaStr_USART("\n\n");
-                
                 if(i == 0) {                                 //Time 0 seria o controle de remocao da fila
                     deQueue();
                 }
@@ -247,12 +225,7 @@ void EXTI1_IRQHandler() {
 
     antibounce_delay = 25;          // 250ms
 
-    if (learning_mode && !isCodeEmpty(codes[team_idx])) {        
-        EnviaStr_USART("time cadastrado:");
-        EnviaNum_USART(team_idx);
-        EnviaStr_USART("\n");
-        EnviaCod_USART(codes[team_idx]);
-        EnviaStr_USART("\n");
+    if (learning_mode && !isCodeEmpty(codes[team_idx])) {
         team_idx++;
     }
     sgn_idx = 0;

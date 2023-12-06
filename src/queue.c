@@ -4,7 +4,6 @@ int topo = -1, fundo = -1, fila[SIZE_QUEUE] = {SIZE_QUEUE + 1};
 
 int isFull() {
     if ((topo == fundo + 1) || (topo == 0 && fundo == SIZE_QUEUE - 1)){
-        EnviaStr_USART("Fila cheia \n");
         return 1;
     }
     return 0;
@@ -17,20 +16,18 @@ int isEmpty() {
 
 void enQueue(int team) {
     if(isFull()){
-        EnviaStr_USART("Fila cheia \n");
+        return;
     }
     if (topo == -1){ 
         topo = 0;
     }
     fundo = (fundo + 1) % SIZE_QUEUE;
     fila[fundo] = team;
-    EnviaStr_USART("Inserido \n");
 }
 
 int deQueue() {
     int team;
     if (isEmpty()) {
-        EnviaStr_USART("Fila vazia \n");
         return (-1);
     } else {
         team = fila[topo];
@@ -42,7 +39,6 @@ int deQueue() {
         else {
             topo = (topo + 1) % SIZE_QUEUE;
         }
-        EnviaStr_USART("Time deletado \n");
         return (team);
     }
 }
