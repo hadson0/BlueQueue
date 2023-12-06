@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "gui"
+version = "0.1.0"
+description = ""
+authors = ["hadson0 <hadsonsb2221@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+tk = "^0.1.0"
+pyserial = "^3.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
