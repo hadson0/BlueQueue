@@ -13,22 +13,24 @@ int antibounce_delay;
 int sgn_idx, team_idx, codes[11][CODE_LENGTH], buffer[CODE_LENGTH];
 
 char tx_str[10];
+char rx_data, rx_dado_anterior;
+unsigned int itx=0;
 
 // Prototipos das funcoes
 void ConfigTIM2();
 void ConfigSystick();
 void TIM2_IRQHandler();
 void EXTI1_IRQHandler();
+void EXTI2_IRQHandler();
 void SysTick_Handler();
 void compareCodes();
 void decadastra();
 
-// Funcoes de debug
+// Funcoes de serializacao
+void int2str(int valor);
 void EnviaStr_USART(char *string);
 void EnviaNum_USART(int valor);
-void int2str(int valor);
-void EXTI1_IRQHandler (void);
-void EXTI2_IRQHandler(void);
+void USART1_IRQHandler();
 
 int main() {
     // Habilita clock do barramento APB2
@@ -45,7 +47,9 @@ int main() {
     RCC->APB2ENR |= RCC_APB2ENR_USART1EN;                   // Hab. clock para USART1
     USART1->BRR  = 8000000/9600;                            // Define baudrate = 9600 baud/s (APB2_clock = 8 MHz)     
     USART1->CR1 |= (USART_CR1_RE | USART_CR1_TE);           // Hab. RX e TX
+    USART1->CR1 |= USART_CR1_RXNEIE;                        // Hab. interrupção por RXNE
     USART1->CR1 |= USART_CR1_UE;                            // Hab USART1
+    NVIC->ISER[1] = (uint32_t)(1 << (USART1_IRQn-32)); // Hab. IRQ da USART1 na NVIC
 
     // Configura o PA1|PA2 com interrupcao no EXTI1|EXTI2
     AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI1_PA | AFIO_EXTICR1_EXTI2_PA;                 // Seleciona PA1 para EXTI1
@@ -92,6 +96,23 @@ void EnviaNum_USART(int valor) {
     EnviaStr_USART(tx_str);
 }
 
+void USART1_IRQHandler() {
+    if (USART1->SR & USART_SR_RXNE){
+        rx_data = USART1->DR;        
+        if (rx_data == 'd') {
+            display();
+        }
+    } else if (USART1->SR & USART_SR_TXE){
+        /* Transmite string */
+        if (tx_str[itx] && itx<100){ // Existe algum elemento a ser transmitido?
+            USART1->DR = tx_str[itx++];
+        } else {
+            USART1->CR1 &= (uint32_t)(~USART_CR1_TXEIE); // Desab. interrupcao por TXE
+            itx = 0;
+        }
+    }
+}
+
 void ConfigTIM2() {
     /* Config. TIM2 com entrada de captura no canal 1 (PA0) */
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;             // Habilita clock do TIM2 do bus APB1
@@ -130,11 +151,8 @@ bool isCodeEmpty(int code[CODE_LENGTH]) {
 // Compara o codigo do buffer com os coigos registrados.
 void compareCodes() {
     if (isCodeEmpty(buffer))  return;
-
-    EnviaCod_USART(buffer);
     for (int i = 0; i < team_idx; ++i) {
         bool match = true;
-
         if (!isCodeEmpty(codes[i])) {
             for (int j = 0; (j < CODE_LENGTH && codes[i][j] != 0); ++j) {
                 // Verifica se o valor do buffer esta dentro da tolerancia de 25%
@@ -149,8 +167,10 @@ void compareCodes() {
                 }
                 else if(checkQueue(i) && !isFull()){         //Checa se nao ta na fila e se nao ta cheia
                     enQueue(i);
+                    EnviaStr_USART("Time ");
+                    EnviaNum_USART(i);
+                    EnviaStr_USART(" chamado\n");
                 }
-                display();
                 return;
             }
         }
@@ -226,6 +246,9 @@ void EXTI1_IRQHandler() {
     antibounce_delay = 25;          // 250ms
 
     if (learning_mode && !isCodeEmpty(codes[team_idx])) {
+        EnviaStr_USART("Time ");
+        EnviaNum_USART(team_idx);
+        EnviaStr_USART(" cadastrado\n");
         team_idx++;
     }
     sgn_idx = 0;

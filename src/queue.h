@@ -1,7 +1,7 @@
 #ifndef QUEUE_H_   
 #define QUEUE_H_
 
-#define SIZE_QUEUE 3
+#define SIZE_QUEUE 11
 
 //Funcoes da fila circular, baseado em https://www.programiz.com/dsa/circular-queue
 

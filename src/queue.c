@@ -1,6 +1,10 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "queue.h"
 
-int topo = -1, fundo = -1, fila[SIZE_QUEUE] = {SIZE_QUEUE + 1};
+int topo = -1, fundo = -1, fila[SIZE_QUEUE] = {SIZE_QUEUE + 1}, time_atual, qtd_times;
 
 int isFull() {
     if ((topo == fundo + 1) || (topo == 0 && fundo == SIZE_QUEUE - 1)){
@@ -23,14 +27,15 @@ void enQueue(int team) {
     }
     fundo = (fundo + 1) % SIZE_QUEUE;
     fila[fundo] = team;
+    qtd_times++;
 }
 
 int deQueue() {
-    int team;
     if (isEmpty()) {
         return (-1);
     } else {
-        team = fila[topo];
+        qtd_times--;
+        time_atual = fila[topo];
         fila[topo] = SIZE_QUEUE + 1;
         if (topo == fundo) {
             topo = -1;
@@ -39,7 +44,7 @@ int deQueue() {
         else {
             topo = (topo + 1) % SIZE_QUEUE;
         }
-        return (team);
+        return (time_atual);
     }
 }
 
@@ -62,13 +67,27 @@ int checkQueue(int team){
 
 // Mostra a fila (por enquanto apenas no USART)
 void display() {
-    if (isEmpty())
-        EnviaStr_USART("Fila vazia\n");
-    else {
-        for (int i = topo; i != fundo; i = (i+1) % SIZE_QUEUE) {
-            EnviaNum_USART(fila[i]);
-        }
-        EnviaNum_USART(fila[fundo]);
-    }
-}
+    char mostra_fila[11] = {};
+    char aux[5];
+    int i = topo, j = 0;
 
+    if(isEmpty()){
+        return;
+    }
+
+    for (; i != fundo && j < 4; i = (i+1) % SIZE_QUEUE, j++) {
+       mostra_fila[j] = fila[i] - 1  + 48;
+    }
+
+    mostra_fila[j++] = fila[fundo] - 1  + 48;
+    mostra_fila[j++] = ';';                                       //Para separar as categorias times na fila; 
+
+    mostra_fila[j++] = time_atual - 1  + 48;
+    mostra_fila[j++] = ';';                                       //time sendo atendido;
+
+    sprintf(aux, "%d", qtd_times);
+    strcat(mostra_fila, aux);
+
+    EnviaStr_USART(mostra_fila);
+    
+}
