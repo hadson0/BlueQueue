@@ -19,6 +19,6 @@ int deQueue(Queue *queue);
 void enQueue(Queue *queue, int team);
 int isFull(Queue *queue);
 int isEmpty(Queue *queue);
-char* get_queue_data(Queue *queue);
+void get_queue_data(Queue *queue, char destiny[50]);
 
 #endif // QUEUE_H_

@@ -230,11 +230,11 @@ void SysTick_Handler() {
 // Gerencia a interrupcao da USART1. Chamada quando um dado e recebido.
 void USART1_IRQHandler() {
     char tx_data[50];
-    char *aux;
+    char aux[50];
     if (USART1->SR & USART_SR_RXNE) {
         char rx_data = USART1->DR;        
         if (rx_data == 'd') {
-            aux = get_queue_data(&queue);
+            get_queue_data(&queue, aux);
             strcpy(tx_data, aux);
             EnviaStr_USART(tx_data);
         }

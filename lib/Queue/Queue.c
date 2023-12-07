@@ -36,6 +36,7 @@ void enQueue(Queue *queue, int team) {
 
 int deQueue(Queue *queue) {
     if (isEmpty(queue)) {
+        queue->current = 0;
         return (-1);
     } else {
         queue->size--;
@@ -70,13 +71,11 @@ int checkQueue(Queue *queue, int team) {
 }
 
 // Mostra a fila (por enquanto apenas no USART)
-char* get_queue_data(Queue *queue) {
+void get_queue_data(Queue *queue, char destiny[50]) {
     char queue_data_buffer[50] = {};
     char aux[50] = {};
     strcpy(queue_data_buffer, "data:");
     int i = queue->front, j = strlen(queue_data_buffer);
-
-    if (isEmpty(queue)) return;
 
     for (; i != queue->rear && j < 9; i = (i+1) % SIZE_QUEUE, j++) {
        queue_data_buffer[j] = queue->elements[i] - 1  + 48;
@@ -91,5 +90,5 @@ char* get_queue_data(Queue *queue) {
     sprintf(aux, "%d", queue->size);
     strcat(queue_data_buffer, aux);
 
-    EnviaStr_USART(queue_data_buffer);
+    strcpy(destiny, queue_data_buffer);
 }
