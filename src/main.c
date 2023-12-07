@@ -1,41 +1,34 @@
 #include <stdbool.h>
+#include <string.h>
 #include <stdio.h>
-#include "queue.h"
+
+#include "Queue.h"
+#include "SerialHandler.h"
 
 #include "stm32f1xx.h"
 
 #define STR_LENGTH 5
 #define CODE_LENGTH 200
 
+Queue queue;
 bool learning_mode = false;
 int sgn_duration, t_ini;
 int antibounce_delay;
 int sgn_idx, team_idx, codes[11][CODE_LENGTH], buffer[CODE_LENGTH];
 
-char tx_str[10];
-char rx_data, rx_dado_anterior;
-unsigned int itx=0;
-
-// Prototipos das funcoes
-void ConfigTIM2();
-void ConfigSystick();
+bool isCodeEmpty(int code[CODE_LENGTH]);
+void unregister();
+void compareCodes();
+void process_signal();
 void TIM2_IRQHandler();
 void EXTI1_IRQHandler();
 void EXTI2_IRQHandler();
 void SysTick_Handler();
-void compareCodes();
-void decadastra();
-
-// Funcoes de serializacao
-void int2str(int valor);
-void EnviaStr_USART(char *string);
-void EnviaNum_USART(int valor);
 void USART1_IRQHandler();
 
 int main() {
     // Habilita clock do barramento APB2
     RCC->APB2ENR |= RCC_APB2ENR_IOPAEN  | RCC_APB2ENR_IOPCEN | RCC_APB2ENR_AFIOEN; 
-    
     GPIOC->CRH |= GPIO_CRH_MODE13_1;                        // Configura pino PC13 como saida open-drain 2 MHz
 
     // Configura pino PA1|PA2 como entrada e PA3 como saida                     
@@ -52,69 +45,12 @@ int main() {
     NVIC->ISER[1] = (uint32_t)(1 << (USART1_IRQn-32)); // Hab. IRQ da USART1 na NVIC
 
     // Configura o PA1|PA2 com interrupcao no EXTI1|EXTI2
-    AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI1_PA | AFIO_EXTICR1_EXTI2_PA;                 // Seleciona PA1 para EXTI1
+    AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI1_PA | AFIO_EXTICR1_EXTI2_PA;                // Seleciona PA1 para EXTI1
     EXTI->FTSR = EXTI_FTSR_FT1 | EXTI_FTSR_FT2;                                     // Sensivel na rampa de descida
     EXTI->IMR = EXTI_IMR_IM1 | EXTI_IMR_IM2;                                        // Hab. mascara de interrup. do EXTI1
     NVIC->ISER[0] = (uint32_t)(1 << EXTI1_IRQn) | (uint32_t)(1 << EXTI2_IRQn);      // Hab. IRQ do EXTI1 na NVIC
 
-    ConfigSystick();
-    ConfigTIM2(); 
-
-    while (1);
-    return 0;
-}
-
-void EnviaStr_USART(char *string) {
-    while(*string){
-        while (!(USART1->SR & USART_SR_TXE));       // Aguarda reg. de dado Tx estar vazio
-        USART1->DR = *string;
-        string++; 
-    }
-}
-
-void int2str(int valor) {
-    int j = 0;
-    if (valor == 0) {
-        tx_str[0] = '0';
-        tx_str[1] = '\0';
-    } else {
-        if (valor < 0) {
-            tx_str[0] = '-';
-            valor *= -1;
-            j++;
-        }
-        tx_str[STR_LENGTH] = '\0'; // Marca o fim da string
-        for (int i = STR_LENGTH - 1; i >= j; --i) {
-            tx_str[i] = (valor % 10) + '0'; // Converte o digito para char
-            valor /= 10;
-        }
-    }
-}
-
-void EnviaNum_USART(int valor) { 
-    int2str(valor);
-    EnviaStr_USART(tx_str);
-}
-
-void USART1_IRQHandler() {
-    if (USART1->SR & USART_SR_RXNE){
-        rx_data = USART1->DR;        
-        if (rx_data == 'd') {
-            display();
-        }
-    } else if (USART1->SR & USART_SR_TXE){
-        /* Transmite string */
-        if (tx_str[itx] && itx<100){ // Existe algum elemento a ser transmitido?
-            USART1->DR = tx_str[itx++];
-        } else {
-            USART1->CR1 &= (uint32_t)(~USART_CR1_TXEIE); // Desab. interrupcao por TXE
-            itx = 0;
-        }
-    }
-}
-
-void ConfigTIM2() {
-    /* Config. TIM2 com entrada de captura no canal 1 (PA0) */
+    // Config. TIM2 com entrada de captura no canal 1 (PA0)
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;             // Habilita clock do TIM2 do bus APB1
     TIM2->ARR = 0xFFFF;                             // Registrador de auto-carregamento (1kHz -> periodo max. 1ms)
     TIM2->PSC = 15;                                 // Prescaler
@@ -125,32 +61,47 @@ void ConfigTIM2() {
     TIM2->CCER |= TIM_CCER_CC1P;                    // Sensivel na borda de descida da entrada
     TIM2->CCER |= TIM_CCER_CC1E;                    // Habilita a captura no CH1
     TIM2->SR &= ~TIM_SR_CC1IF;                      // Apaga flag sinalizadora da IRQ
-    TIM2->DIER |= TIM_DIER_UIE | TIM_DIER_CC1IE;                   // Habilita IRQ por captura    
+    TIM2->DIER |= TIM_DIER_UIE | TIM_DIER_CC1IE;    // Habilita IRQ por captura    
     NVIC->ISER[0] = (uint32_t)(1 << TIM2_IRQn);     // Hab. IRQ do TIM2 na NVIC
 
     // Config. o modo one-pulse
     TIM2->CR1 = TIM_CR1_OPM;
-}
 
-void ConfigSystick() {
+    // Configura o SysTick para interrupcao a cada 10ms
     SysTick->LOAD = 80e3;   // Carrega o valor de contagem (10ms)
 	SysTick->VAL = 0;       // Limpa o valor da contagem
     SysTick->CTRL = 0b111;  // Clock do processador sem dividir, H? ab. IRQ e SysTick
+
+    createQueue(&queue);
+
+    while (1);
+    return 0;
 }
 
-// Verifica se o cÃ³digo estÃ¡ vazio.
+// Verifica se o codigo esta vazio.
 bool isCodeEmpty(int code[CODE_LENGTH]) {
     for (int i = 0; i < CODE_LENGTH; ++i) {
-        if (code[i] != 0) {
+        if (code[i] != 0)
             return false;
-        }
     }
     return true;
+}
+
+// Funcao de decadastramento
+void unregister() {
+    if (team_idx > 0)
+        team_idx--;
+
+    for (int i = 0;i < CODE_LENGTH;i++) {
+        codes[team_idx][i] = 0;
+    }
 }
 
 // Compara o codigo do buffer com os coigos registrados.
 void compareCodes() {
     if (isCodeEmpty(buffer))  return;
+    EnviaCod_USART(buffer);
+    EnviaStr_USART("\n");
     for (int i = 0; i < team_idx; ++i) {
         bool match = true;
         if (!isCodeEmpty(codes[i])) {
@@ -162,11 +113,11 @@ void compareCodes() {
                 }
             }
             if (match) {
-                if(i == 0) {                                 //Time 0 seria o controle de remocao da fila
-                    deQueue();
+                if(i == 0) {                                 // Responsavel por desenfileirar o time que esta sendo atendido
+                    deQueue(&queue);
                 }
-                else if(checkQueue(i) && !isFull()){         //Checa se nao ta na fila e se nao ta cheia
-                    enQueue(i);
+                else if(checkQueue(&queue, i) && !isFull(&queue)) {  
+                    enQueue(&queue, i);
                     EnviaStr_USART("Time ");
                     EnviaNum_USART(i);
                     EnviaStr_USART(" chamado\n");
@@ -189,14 +140,15 @@ void process_signal() {
             codes[team_idx][sgn_idx++] = sgn_duration;
         }
     } 
-
     // MODO DE OPERACAO
     else  {
         if (sgn_duration > 10000) {
             compareCodes();     
             for (int k = 0; k < CODE_LENGTH; k++) {
                 buffer[k] = 0;
-            }  
+            }
+            sgn_duration = 0;
+            t_ini = 0;  
             sgn_idx = 0;
             return;
         }
@@ -213,8 +165,7 @@ void TIM2_IRQHandler() {
     if (TIM2->SR & TIM_SR_UIF) {        // Verifica se a IRQ foi disparada pelo overflow
         TIM2->SR &= ~TIM_SR_UIF;        // Apaga flag sinalizadora da IRQ
         sgn_duration = 0;
-        t_ini = 0;
-       
+        t_ini = 0;    
         return;
     }    
 
@@ -249,6 +200,8 @@ void EXTI1_IRQHandler() {
         EnviaStr_USART("Time ");
         EnviaNum_USART(team_idx);
         EnviaStr_USART(" cadastrado\n");
+        EnviaCod_USART(codes[team_idx]);
+        EnviaStr_USART("\n");
         team_idx++;
     }
     sgn_idx = 0;
@@ -256,26 +209,14 @@ void EXTI1_IRQHandler() {
     GPIOA->ODR ^= (1<<3);           // Inverte o estado do LED - Modo aprendizagem: aceso
 }
 
-// Gerencia a interrupcao do EXTI2. Chamada quando o botao de remoção de team e pressionado
+// Gerencia a interrupcao do EXTI2. Chamada quando o botao de remoção de team e pressionado.
 void EXTI2_IRQHandler() {
     EXTI->PR = EXTI_PR_PIF2;        // Apaga flag sinalizadora da IRQ
     EXTI->IMR &= ~EXTI_IMR_IM2;     // Desabilita mascara de interrup. do EXTI2
 
     antibounce_delay = 25;          // 250ms
-    
-    decadastra();
+    unregister();
 }
-
-// Funcao de decadastramento
-void decadastra() {
-    if(team_idx > 0)
-        team_idx--;
-
-    for(int i = 0;i < CODE_LENGTH;i++) {
-        codes[team_idx][i] = 0;
-    }
-}
-
 
 // Gerencia a interrupcao do SysTick. Chamada a cada 10ms.
 void SysTick_Handler() {
@@ -283,5 +224,19 @@ void SysTick_Handler() {
         antibounce_delay--;
     } else {
         EXTI->IMR |= EXTI_IMR_IM1 | EXTI_IMR_IM2; // Hab. mascara de interrup. do EXTI1 e EXTI2        
+    }
+}
+
+// Gerencia a interrupcao da USART1. Chamada quando um dado e recebido.
+void USART1_IRQHandler() {
+    char tx_data[50];
+    char *aux;
+    if (USART1->SR & USART_SR_RXNE) {
+        char rx_data = USART1->DR;        
+        if (rx_data == 'd') {
+            aux = get_queue_data(&queue);
+            strcpy(tx_data, aux);
+            EnviaStr_USART(tx_data);
+        }
     }
 }
