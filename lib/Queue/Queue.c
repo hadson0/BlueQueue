@@ -57,7 +57,7 @@ int checkQueue(Queue *queue, int team) {
     if(isEmpty(queue)) {
         return 1;
     }
-    if (queue->front == 0 && queue->rear == 0) {                                //Caso topo e fundo serem 0s e o time ja foi inserido
+    if (queue->front == 0 && queue->rear == 0) {
         if (queue->elements[0] == team) {
             return 0;
         }
@@ -70,25 +70,27 @@ int checkQueue(Queue *queue, int team) {
     return 1;
 }
 
-// Mostra a fila (por enquanto apenas no USART)
-void get_queue_data(Queue *queue, char destiny[50]) {
-    char queue_data_buffer[50] = {};
-    char aux[50] = {};
+// Retorna os dados da fila no formado data:fila;time sendo atendido;tamaho da fila
+void get_queue_data(Queue *queue, char queue_data_buffer[50]) {
+    char aux[50];
+    memset(queue_data_buffer, 0, 50);
     strcpy(queue_data_buffer, "data:");
-    int i = queue->front, j = strlen(queue_data_buffer);
 
-    for (; i != queue->rear && j < 9; i = (i+1) % SIZE_QUEUE, j++) {
-       queue_data_buffer[j] = queue->elements[i] - 1  + 48;
+    int i = queue->front, j = strlen(queue_data_buffer);
+    for (; i != queue->rear; i = (i+1) % SIZE_QUEUE, j++) {
+        if (queue->elements[i]) {                                       // Para nao enviar o time -1
+            queue_data_buffer[j] = queue->elements[i] - 1  + 48;
+        }
     }
 
-    queue_data_buffer[j++] = queue->elements[queue->rear] - 1  + 48;
-    queue_data_buffer[j++] = ';';                                       //Para separar as categorias times na fila; 
+   if (queue->elements[queue->rear]) {                                  // Para nao enviar o time -1
+        queue_data_buffer[j++] = queue->elements[queue->rear] - 1  + 48;
+    }
+    queue_data_buffer[j++] = ';';
 
     queue_data_buffer[j++] = queue->current - 1  + 48;
-    queue_data_buffer[j++] = ';';                                       //time sendo atendido;
+    queue_data_buffer[j++] = ';';
 
-    sprintf(aux, "%d", queue->size);
+    sprintf(aux, "%d;", queue->size);
     strcat(queue_data_buffer, aux);
-
-    strcpy(destiny, queue_data_buffer);
 }

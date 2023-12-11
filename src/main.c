@@ -100,8 +100,8 @@ void unregister() {
 // Compara o codigo do buffer com os coigos registrados.
 void compareCodes() {
     if (isCodeEmpty(buffer))  return;
-    EnviaCod_USART(buffer);
-    EnviaStr_USART("\n");
+    //EnviaCod_USART(buffer);
+    //EnviaStr_USART("\n");
     for (int i = 0; i < team_idx; ++i) {
         bool match = true;
         if (!isCodeEmpty(codes[i])) {
@@ -118,9 +118,9 @@ void compareCodes() {
                 }
                 else if(checkQueue(&queue, i) && !isFull(&queue)) {  
                     enQueue(&queue, i);
-                    EnviaStr_USART("Time ");
-                    EnviaNum_USART(i);
-                    EnviaStr_USART(" chamado\n");
+                    //EnviaStr_USART("Time ");
+                    //EnviaNum_USART(i);
+                    //EnviaStr_USART(" chamado\n");
                 }
                 return;
             }
@@ -197,11 +197,11 @@ void EXTI1_IRQHandler() {
     antibounce_delay = 25;          // 250ms
 
     if (learning_mode && !isCodeEmpty(codes[team_idx])) {
-        EnviaStr_USART("Time ");
-        EnviaNum_USART(team_idx);
-        EnviaStr_USART(" cadastrado\n");
-        EnviaCod_USART(codes[team_idx]);
-        EnviaStr_USART("\n");
+        //EnviaStr_USART("Time ");
+        //EnviaNum_USART(team_idx);
+        //EnviaStr_USART(" cadastrado\n");
+        //EnviaCod_USART(codes[team_idx]);
+        //EnviaStr_USART("\n");
         team_idx++;
     }
     sgn_idx = 0;
@@ -229,14 +229,15 @@ void SysTick_Handler() {
 
 // Gerencia a interrupcao da USART1. Chamada quando um dado e recebido.
 void USART1_IRQHandler() {
-    char tx_data[50];
-    char aux[50];
+    char tx_data[50] = "";
+    char aux[50] = "";
     if (USART1->SR & USART_SR_RXNE) {
         char rx_data = USART1->DR;        
         if (rx_data == 'd') {
-            get_queue_data(&queue, aux);
-            strcpy(tx_data, aux);
-            EnviaStr_USART(tx_data);
+            get_queue_data(&queue, tx_data);
+            sprintf(aux, "%d;", team_idx);
+            strcat(tx_data, aux);               // Concatena o numero de times cadastrados
+            EnviaStr_USART(tx_data);            // Envia os dados da fila
         }
     }
 }
