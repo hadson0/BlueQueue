@@ -11,6 +11,6 @@ This project involves the development of an electronic queue management system u
 - **Microcontroller Code**: Implemented using C and PlatformIO, with no third-party libraries.
 - **UI Implementation**: Python-based user interface with Tkinter.
 
-  ## Acknowledgements
+## Acknowledgements
 
 This project was developed in collaboration with Professor Luis Carlos Mathias from UTFPR Campus Toledo.
